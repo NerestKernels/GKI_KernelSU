@@ -1,6 +1,6 @@
 # Post-Install — Verify & Finish Setup
 
-After flashing a Wild Kernels GKI kernel, do these checks in order.
+After flashing a Nerest Kernels GKI kernel, do these checks in order.
 
 ## 1. Download matching manager — KernelSU / KernelSU-Next / ReSukiSU
 
