@@ -44,7 +44,7 @@ on:
       brand_name:
         description: "Kernel Branding"
         type: string
-        default: Wild
+        default: TheFloresto
       commit_mode:
         description: "latest = branch tips, verified = audited pins, update = build latest then promote verified pins on success"
         required: false
@@ -1080,7 +1080,11 @@ jobs:
     - notes-preview
 
     env:
-      GH_TOKEN: ${{ github.token }}
+      # Use RELEASE_TOKEN so releases are created in the target repository
+      GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+      RELEASE_NOTES: .github/config/RELEASE_NOTES.md
+      # Target repository for tags + releases
+      RELEASE_REPO: NerestKernels/GKI_KernelSU_SUSFS
     outputs:
       new_tag: ${{ steps.tag.outputs.new_tag }}
     steps:
@@ -1139,7 +1143,8 @@ jobs:
       id: tag
       if: inputs.release_type != 'Action'
       run: |
-        mapfile -t RELEASE_TAGS < <(gh api --paginate "repos/${{ github.repository }}/tags?per_page=100" --jq '.[].name' 2>/dev/null | grep -E '^r[0-9]+$' || true)
+        # Look up existing rN tags in the *target* release repository
+        mapfile -t RELEASE_TAGS < <(gh api --paginate "repos/${RELEASE_REPO}/tags?per_page=100" --jq '.[].name' 2>/dev/null | grep -E '^r[0-9]+$' || true)
 
         LATEST_REV=0
         for TAG in "${RELEASE_TAGS[@]}"; do
@@ -1156,9 +1161,9 @@ jobs:
         fi
 
         if [[ ${#RELEASE_TAGS[@]} -gt 0 ]]; then
-          echo "Latest r-tag: r${LATEST_REV}"
+          echo "Latest r-tag in ${RELEASE_REPO}: r${LATEST_REV}"
         else
-          echo "No existing r-tags found; starting at r1"
+          echo "No existing r-tags found in ${RELEASE_REPO}; starting at r1"
         fi
         echo "New tag: $NEW_TAG"
         echo "NEW_TAG=${NEW_TAG}" >> $GITHUB_ENV
@@ -1304,49 +1309,49 @@ jobs:
       uses: actions/download-artifact@v7
       with:
         path: release-assets
-        pattern: '5.10.*-android12-*-AnyKernel3'
+        pattern: '5.10.*-android12-*-AK3'
         merge-multiple: false
 
     - name: Download AnyKernel3 (5.10 android13)
       uses: actions/download-artifact@v7
       with:
         path: release-assets
-        pattern: '5.10.*-android13-*-AnyKernel3'
+        pattern: '5.10.*-android13-*-AK3'
         merge-multiple: false
 
     - name: Download AnyKernel3 (5.15 android13)
       uses: actions/download-artifact@v7
       with:
         path: release-assets
-        pattern: '5.15.*-android13-*-AnyKernel3'
+        pattern: '5.15.*-android13-*-AK3'
         merge-multiple: false
 
     - name: Download AnyKernel3 (5.15 android14)
       uses: actions/download-artifact@v7
       with:
         path: release-assets
-        pattern: '5.15.*-android14-*-AnyKernel3'
+        pattern: '5.15.*-android14-*-AK3'
         merge-multiple: false
 
     - name: Download AnyKernel3 (6.1 android14)
       uses: actions/download-artifact@v7
       with:
         path: release-assets
-        pattern: '6.1.*-android14-*-AnyKernel3'
+        pattern: '6.1.*-android14-*-AK3'
         merge-multiple: false
 
     - name: Download AnyKernel3 (6.6 android15)
       uses: actions/download-artifact@v7
       with:
         path: release-assets
-        pattern: '6.6.*-android15-*-AnyKernel3'
+        pattern: '6.6.*-android15-*-AK3'
         merge-multiple: false
 
     - name: Download AnyKernel3 (6.12 android16)
       uses: actions/download-artifact@v7
       with:
         path: release-assets
-        pattern: '6.12.*-android16-*-AnyKernel3'
+        pattern: '6.12.*-android16-*-AK3'
         merge-multiple: false
 
     - name: Verify all AnyKernel3 artifacts downloaded
@@ -1355,7 +1360,7 @@ jobs:
       run: |
         set -euo pipefail
         expected=$(gh api "repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts?per_page=100" --paginate --jq '.artifacts[].name' | grep -c '\-AnyKernel3$')
-        got=$(ls -d release-assets/*-AnyKernel3 2>/dev/null | wc -l)
+        got=$(ls -d release-assets/*-AK3 2>/dev/null | wc -l)
         echo "AnyKernel3 artifacts in run: $expected, downloaded: $got"
         if [ "$got" -ne "$expected" ]; then
           echo "ERROR: downloaded $got of $expected AnyKernel3 artifacts" >&2
@@ -1375,7 +1380,7 @@ jobs:
         set -e
         shopt -s nullglob
 
-        for dir in release-assets/*-AnyKernel3; do
+        for dir in release-assets/*-AK3; do
           zip_name="${dir}.zip"
           rm -f "$zip_name"
           cd "$dir"
@@ -1411,7 +1416,9 @@ jobs:
 
     - name: Create Release
       env:
-        GH_TOKEN: ${{ github.token }}
+        # Publish into the separate NerestKernels repository using RELEASE_TOKEN
+        token: ${{ secrets.RELEASE_TOKEN }}
+        repository: ${{ env.RELEASE_REPO }}
         TAG_NAME: ${{ steps.tag.outputs.new_tag }}
         RELEASE_TITLE: ${{ steps.release_meta.outputs.release_title }}
         IS_PRERELEASE: ${{ inputs.release_type == 'Pre-Release' }}
