@@ -7,7 +7,7 @@ This guide shows how to fork the repository, build one specific GKI kernel with 
 
 ## 1. Fork the Repository
 
-1. Open [WildKernels/GKI_KernelSU_SUSFS](https://github.com/WildKernels/GKI_KernelSU_SUSFS).
+1. Open [NerestKernels/GKI_KernelSU_SUSFS](https://github.com/NerestKernels/GKI_KernelSU_SUSFS).
 2. Select **Fork**, choose your account, and create the fork.
 3. Open the **Actions** tab in your fork.
 4. If GitHub says workflows are disabled, select **I understand my workflows, go ahead and enable them**.
