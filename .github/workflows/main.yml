@@ -1588,7 +1588,7 @@ jobs:
           if env("USE_BPF","true")=="true": feats.append("BTF / eBPF / FUSE-BPF")
           if env("USE_PERF","false")=="true": feats.append("Performance Tuning")
           lines=[]
-          lines.append("# Wild Kernels for GKI2 Devices")
+          lines.append("# Nerest Kernels for GKI2 Devices")
           lines.append("")
           lines.append("## Root")
           lines.append("")
