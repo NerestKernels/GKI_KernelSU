@@ -21,13 +21,7 @@ runs:
         # Apply base SUSFS patches
         cp "${{ github.workspace }}/susfs4ksu/kernel_patches/fs/"* "${{ github.workspace }}/kernel/common/fs/"
         cp "${{ github.workspace }}/susfs4ksu/kernel_patches/include/linux/"* "${{ github.workspace }}/kernel/common/include/linux/"
-        cp ${{ github.workspace }}/susfs4ksu/kernel_patches/50_add_susfs_in_gki-${{ inputs.version }}.patch ./
-        
-        # FIX: копируем недостающие SUSFS header файлы для statfs
-        if [ -d "${{ github.workspace }}/susfs4ksu/kernel_patches/include/susfs" ]; then
-          mkdir -p "${{ github.workspace }}/kernel/common/include/susfs"
-          cp -r "${{ github.workspace }}/susfs4ksu/kernel_patches/include/susfs/"* "${{ github.workspace }}/kernel/common/include/susfs/" 2>/dev/null || true
-        fi      
+        cp ${{ github.workspace }}/susfs4ksu/kernel_patches/50_add_susfs_in_gki-${{ inputs.version }}.patch ./      
 
     - name: Apply Android 12 5.10 Fake Patches
       shell: bash
@@ -144,6 +138,17 @@ runs:
           echo "Applying task_mmu.c Android 16 6.12 Fake Patch"
           sed -i 's/vma_data_pages/vma_pages/g' fs/proc/task_mmu.c
         fi
+
+    - name: Add SUSFS header include to statfs.c
+      shell: bash
+      working-directory: ${{ github.workspace }}/kernel/common
+      run: |
+       if grep -q "susfs_sus_kstat_spoof_vfs_statfs" fs/statfs.c; then
+         if ! grep -q "#include.*susfs" fs/statfs.c; then
+         echo "[*] Adding SUSFS header include to fs/statfs.c"
+         sed -i '1i #include <linux/susfs.h>' fs/statfs.c
+        fi
+       fi
 
     - name: Apply Kernel SUSFS Patches
       shell: bash
