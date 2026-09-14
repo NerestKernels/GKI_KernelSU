@@ -98,6 +98,11 @@ jobs:
                           ["git", "-C", tmp, "sparse-checkout", "set", "Makefile"],
                           check=True, capture_output=True, timeout=60,
                       )
+                      # Checkout the sparse files to materialize Makefile
+                      subprocess.run(
+                          ["git", "-C", tmp, "checkout"],
+                          check=True, capture_output=True, timeout=60,
+                      )
                       sub = None
                       with open(os.path.join(tmp, "Makefile")) as f:
                           for line in f:
