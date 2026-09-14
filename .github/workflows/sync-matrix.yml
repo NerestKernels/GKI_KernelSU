@@ -93,14 +93,14 @@ jobs:
                            "--depth", "1", "--branch", head, COMMON_URL, tmp],
                           check=True, capture_output=True, timeout=600,
                       )
+                      # Initialize sparse checkout with cone mode
+                      subprocess.run(
+                          ["git", "-C", tmp, "sparse-checkout", "init", "--cone"],
+                          check=True, capture_output=True, timeout=60,
+                      )
                       # Configure sparse checkout to include Makefile
                       subprocess.run(
                           ["git", "-C", tmp, "sparse-checkout", "set", "Makefile"],
-                          check=True, capture_output=True, timeout=60,
-                      )
-                      # Checkout the sparse files to materialize Makefile
-                      subprocess.run(
-                          ["git", "-C", tmp, "checkout"],
                           check=True, capture_output=True, timeout=60,
                       )
                       sub = None
