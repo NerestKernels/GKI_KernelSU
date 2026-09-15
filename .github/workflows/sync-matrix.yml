@@ -93,27 +93,19 @@ jobs:
                            "--depth", "1", "--branch", head, COMMON_URL, tmp],
                           check=True, capture_output=True, timeout=600,
                       )
-                      # Initialize sparse checkout with cone mode
-                      subprocess.run(
-                          ["git", "-C", tmp, "sparse-checkout", "init", "--cone"],
-                          check=True, capture_output=True, timeout=60,
+                      # Read Makefile directly from git using cat-file to avoid
+                      # sparse checkout materialization issues with blob:none filter
+                      result = subprocess.run(
+                          ["git", "-C", tmp, "cat-file", "blob", "HEAD:Makefile"],
+                          capture_output=True, text=True, timeout=60,
+                          check=True
                       )
-                      # Configure sparse checkout to include Makefile
-                      subprocess.run(
-                          ["git", "-C", tmp, "sparse-checkout", "set", "Makefile"],
-                          check=True, capture_output=True, timeout=60,
-                      )
-                      # Materialize sparse files to disk
-                      subprocess.run(
-                          ["git", "-C", tmp, "checkout"],
-                          check=True, capture_output=True, timeout=60,
-                      )
+                      makefile_content = result.stdout
                       sub = None
-                      with open(os.path.join(tmp, "Makefile")) as f:
-                          for line in f:
-                              if line.startswith("SUBLEVEL ="):
-                                  sub = line.split("=", 1)[1].strip()
-                                  break
+                      for line in makefile_content.splitlines():
+                          if line.startswith("SUBLEVEL ="):
+                              sub = line.split("=", 1)[1].strip()
+                              break
                       if sub is None:
                           print(f"WARNING: no SUBLEVEL in {head}; skipping")
                           continue
