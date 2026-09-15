@@ -1,12 +1,12 @@
 name: Sync Kernel Matrix
 
 # Adds new upstream monthly branches to the build matrix via PR against
-# main. If a sync PR is already open, it is updated in place (the sync
-# branch is rebuilt from main each run, so PRs never stack). Dead/retired branches
+# dev. If a sync PR is already open, it is updated in place (the sync
+# branch is rebuilt from dev each run, so PRs never stack). Dead/retired branches
 # need no action: download-kernel falls back to the latest release tag.
 #
 # NOTE: scheduled runs only fire from the default branch, so the cron
-# below stays dormant until this file exists on main. workflow_dispatch
+# below stays dormant until this file exists on dev. workflow_dispatch
 # works from any branch right away.
 
 permissions:
@@ -22,10 +22,10 @@ jobs:
   sync-matrix:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout main
+      - name: Checkout dev
         uses: actions/checkout@v7
         with:
-          ref: main
+          ref: dev
           fetch-depth: 0
 
       - name: Prepare sync branch
@@ -33,8 +33,8 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git fetch origin main bot/sync-kernel-matrix || true
-          git checkout -B bot/sync-kernel-matrix origin/main
+          git fetch origin dev bot/sync-kernel-matrix || true
+          git checkout -B bot/sync-kernel-matrix origin/dev
 
       - name: Add new upstream months
         id: sync
@@ -143,7 +143,7 @@ jobs:
           # Check if PR already exists using REST API
           PR_COUNT=$(curl -s -H "Authorization: token $GH_TOKEN" \
             -H "Accept: application/vnd.github.v3+json" \
-            "https://api.github.com/repos/$GITHUB_REPOSITORY/pulls?head=$GITHUB_REPOSITORY_OWNER:$BRANCH&base=main&state=open" \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/pulls?head=$GITHUB_REPOSITORY_OWNER:$BRANCH&base=dev&state=open" \
             | jq 'length')
           
           if [ "$PR_COUNT" = "0" ]; then
@@ -157,7 +157,7 @@ jobs:
           {
             "title": "Sync kernel matrix: add new upstream months",
             "head": "$BRANCH",
-            "base": "main",
+            "base": "dev",
             "body": "New monthly branches detected upstream, sublevels resolved from source:\n\n- $BODY\n\nDead/retired branches need no action (tag fallback covers them)."
           }
           EOF
