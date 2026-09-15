@@ -139,11 +139,29 @@ jobs:
           git add .github/config/
           git commit -m "Sync kernel matrix: add ${{ steps.sync.outputs.added }}"
           git push --force-with-lease origin "$BRANCH" || git push origin "$BRANCH"
-          if [ "$(gh pr list --head "$BRANCH" --base main --json number --jq 'length')" = "0" ]; then
+          
+          # Check if PR already exists using REST API
+          PR_COUNT=$(curl -s -H "Authorization: token $GH_TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/pulls?head=$GITHUB_REPOSITORY_OWNER:$BRANCH&base=main&state=open" \
+            | jq 'length')
+          
+          if [ "$PR_COUNT" = "0" ]; then
+            # Create new PR using REST API
             BODY=$(printf '%s' "${{ steps.sync.outputs.added }}" | sed 's/; /\n- /g; s/^/- /')
-            gh pr create --head "$BRANCH" --base main \
-              --title "Sync kernel matrix: add new upstream months" \
-              --body "$(printf 'New monthly branches detected upstream, sublevels resolved from source:\n\n%s\n\nDead/retired branches need no action (tag fallback covers them).' "$BODY")"
+            curl -X POST \
+              -H "Authorization: token $GH_TOKEN" \
+              -H "Accept: application/vnd.github.v3+json" \
+              "https://api.github.com/repos/$GITHUB_REPOSITORY/pulls" \
+              -d @- <<EOF
+          {
+            "title": "Sync kernel matrix: add new upstream months",
+            "head": "$BRANCH",
+            "base": "main",
+            "body": "New monthly branches detected upstream, sublevels resolved from source:\n\n- $BODY\n\nDead/retired branches need no action (tag fallback covers them)."
+          }
+          EOF
+            echo "Pull request created."
           else
             echo "Sync PR already open; updated in place."
           fi
