@@ -1,5 +1,5 @@
 name: 'Build Kernel'
-description: 'Builds kernel using legacy build.sh or Bazel (kleaf)'
+description: 'Builds kernel using legacy build.sh or clang/make (no Bazel)'
 inputs:
   version:
     description: 'Kernel config version (e.g., android14-6.1)'
@@ -64,6 +64,12 @@ runs:
         echo "✅ Dependencies installed"
         echo "::endgroup::"
 
+    - name: Initialize Config Fragment
+      shell: bash
+      run: |
+        set -euo pipefail
+        touch "${{ github.workspace }}/thefloresto.fragment"
+
     - name: 'Build Kernel'
       shell: bash
       working-directory: ${{ github.workspace }}/kernel
@@ -90,17 +96,70 @@ runs:
           HOSTCXX="/usr/bin/ccache clang++" \
           build/build.sh -j"$(nproc)"
         else
-          sed -i '/name = "kernel_aarch64",/a\    check_defconfig = "disabled",' common/BUILD.bazel
-          PAGE_SIZE_FLAGS=()
+          # No build.sh (Bazel-style tree). Instead of invoking Bazel, use clang + make
+          # For now do not support 16k page_size without extra config/patching
           if [ "$PAGE_SIZE" = "16k" ]; then
-            PAGE_SIZE_FLAGS+=(--page_size=16k)
+            echo "ERROR: page_size=${PAGE_SIZE} requires Kleaf/Bazel for this tree; please use a tree with build.sh or supply a pre-generated .config that enables 16k." >&2
+            exit 1
           fi
-          tools/bazel build \
-            --config=fast \
-            --lto=full \
-            "${PAGE_SIZE_FLAGS[@]}" \
-            --disk_cache=/home/runner/.cache/bazel \
-            //common:kernel_aarch64/Image
+
+          # Prefer repo prebuilts clang if present, otherwise fall back to system clang
+          if [ -d "prebuilts/clang/host/linux-x86" ]; then
+            latest=$(ls -d prebuilts/clang/host/linux-x86/clang-r* 2>/dev/null | sort -V | tail -n1 || true)
+            if [ -n "$latest" ]; then
+              export PATH="$latest/bin:$PATH"
+              export LIBCLANG_PATH="$latest/lib"
+              echo "Using prebuilts clang: $latest"
+            fi
+          fi
+
+          # Ensure ccache wrappers (if provided by earlier steps) are first
+          if [ -d "${{ github.workspace }}/.ccache-bin" ]; then
+            export PATH="${{ github.workspace }}/.ccache-bin:$PATH"
+          fi
+
+          # Ensure ld.lld is visible as ld inside prebuilts clang bin if needed
+          if [ -n "$latest" ] && [ -f "$latest/bin/ld.lld" ] && [ ! -f "$latest/bin/ld" ]; then
+            ln -sf "$latest/bin/ld.lld" "$latest/bin/ld" || true
+          fi
+
+          # Force clang use (ccache wrapper if present)
+          export CC="/usr/bin/ccache clang"
+          export CXX="/usr/bin/ccache clang++"
+          export HOSTCC="/usr/bin/ccache clang"
+          export HOSTCXX="/usr/bin/ccache clang++"
+
+          # Use full LTO as requested
+          export LTO=full
+
+          # Extra KCFLAGS requested
+          export KCFLAGS_EXTRA="-O2"
+
+          # Useful kernel build flags (preserve reproducibility/diagnostics)
+          export KBUILD_GENDWARFKSYMS_STABLE=1
+          export KCFLAGS="-fno-stack-protector -no-canonical-prefixes -pipe"
+
+          # Build using the kernel makefiles; output to /home/runner/out to match build.sh behavior
+          OUT_DIR="/home/runner/out"
+          mkdir -p "$OUT_DIR"
+
+          make -j"$(nproc)" LLVM=1 ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- O="$OUT_DIR" gki_defconfig
+
+          # Merge custom config fragment (if present) into the generated .config
+          if [ -f "${{ github.workspace }}/thefloresto.fragment" ] && [ -s "${{ github.workspace }}/thefloresto.fragment" ]; then
+            if [ -x "scripts/config/merge_config.sh" ]; then
+              echo "Merging thefloresto.fragment into $OUT_DIR/.config"
+              scripts/config/merge_config.sh "$OUT_DIR/.config" "${{ github.workspace }}/thefloresto.fragment" || true
+              # refresh derived config bits
+              make -s O="$OUT_DIR" olddefconfig
+            else
+              echo "Warning: scripts/config/merge_config.sh not found or not executable; skipping fragment merge"
+            fi
+          else
+            echo "No thefloresto.fragment contents to merge (touch-only); skipping merge"
+          fi
+
+          make -j"$(nproc)" LLVM=1 ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- O="$OUT_DIR" Image
         fi
 
     - name: 'Verify Page Size in Generated .config'
@@ -168,6 +227,13 @@ runs:
         if [ -f "/home/runner/out/dist/Image" ]; then
           echo "Found Image at /home/runner/out/dist/Image"
           cp "/home/runner/out/dist/Image" "${{ github.workspace }}/AnyKernel3/Image"
+          exit 0
+        fi
+
+        # also check the Make O= output path used above
+        if [ -f "/home/runner/out/arch/arm64/boot/Image" ]; then
+          echo "Found Image at /home/runner/out/arch/arm64/boot/Image"
+          cp "/home/runner/out/arch/arm64/boot/Image" "${{ github.workspace }}/AnyKernel3/Image"
           exit 0
         fi
 
