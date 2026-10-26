@@ -66,8 +66,8 @@ runs:
         # half-merged tree.
         if [ "${{ inputs.root_flavor }}" = "next" ]; then
           git fetch https://gitlab.com/pershoot/susfs4ksu.git \
-            9c3d8ae7891b9799f5f95e2191006e541e3510ba \
-            b57ed1998b82c4e3a2a81cdbf11172a560979c40
-          git cherry-pick 9c3d8ae7891b9799f5f95e2191006e541e3510ba
-          git cherry-pick b57ed1998b82c4e3a2a81cdbf11172a560979c40
+            6387756d64b3ab9ececefc4523627a9ee05a7519 \
+            161c058fed5544a6573d87124f346dadd5c4962d
+          git cherry-pick 6387756d64b3ab9ececefc4523627a9ee05a7519
+          git cherry-pick 161c058fed5544a6573d87124f346dadd5c4962d
         fi
