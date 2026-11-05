@@ -78,6 +78,7 @@ runs:
           BUILD_CONFIG=common/build.config.gki.aarch64 \
           build/build.sh -j"$(nproc)"
         else
+          sed -i '/check_defconfig =/d' common/BUILD.bazel
           sed -i '/name = "kernel_aarch64",/a\    check_defconfig = "disabled",' common/BUILD.bazel
           PAGE_SIZE_FLAGS=()
           if [ "$PAGE_SIZE" = "16k" ]; then
