@@ -78,6 +78,10 @@ on:
         description: "SUSFS"
         type: boolean
         default: true
+      use_vpnhide:
+        description: "VPNHide"
+        type: boolean
+        default: true        
       use_nomount:
         description: "NoMount"
         type: boolean
@@ -523,18 +527,20 @@ jobs:
           if [ "${{ github.event_name }}" = "schedule" ]; then
             F_SUSFS=true;  F_NOMOUNT=true; F_BBG=true;  F_NET=true
             F_DS=true;     F_NTSYNC=true;  F_PTRACE=true; F_UNICODE=true
-            F_BPF=true;    F_PERF=false
+            F_BPF=true;    F_PERF=false;   F_VPNHIDE=true
           else
             F_SUSFS="${{ inputs.use_susfs }}";   F_NOMOUNT="${{ inputs.use_nomount }}"
             F_BBG="${{ inputs.use_bbg }}";        F_NET="${{ inputs.use_net }}"
             F_DS="${{ inputs.use_ds }}";          F_NTSYNC="${{ inputs.use_ntsync }}"
             F_PTRACE="${{ inputs.use_ptrace }}";  F_UNICODE="${{ inputs.use_unicode }}"
             F_BPF="${{ inputs.use_bpf }}";        F_PERF="${{ inputs.use_perf }}"
+            F_VPNHIDE="${{ inputs.use_vpnhide }}"
           fi
 
           FEATURES=""
           [ "$F_SUSFS" = "true" ] && FEATURES="${FEATURES}SUSFS+"
           [ "$F_NOMOUNT" = "true" ] && FEATURES="${FEATURES}NoMount+"
+          [ "$F_VPNHIDE" = "true" ] && FEATURES="${FEATURES}VPNHide+"
           [ "$F_BBG" = "true" ] && FEATURES="${FEATURES}BBG+"
           [ "$F_NET" = "true" ] && FEATURES="${FEATURES}NET+"
           [ "$F_DS" = "true" ] && FEATURES="${FEATURES}DS+"
