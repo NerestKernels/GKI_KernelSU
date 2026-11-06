@@ -31,8 +31,7 @@ inputs:
 outputs:
   kernel_uname:
     description: 'Full Linux version line from the built image, when image_path is supplied'
-    value: ${{ steps.check.outputs.kernel_uname }}    
-
+    value: ${{ steps.check.outputs.kernel_uname }}
 runs:
   using: "composite"
   steps:
@@ -66,7 +65,7 @@ runs:
             sed -i '$d' scripts/setlocalversion && echo "echo \"-$BRAND\"" >> scripts/setlocalversion
           fi
         else
-          if [[ ${{ inputs.version }} == "android15-6.6" || ${{ inputs.version }} == "android16-6.12" || ${{ inputs.version }} == "android17-6.18" ]]; then
+          if [[ "${{ inputs.version }}" == "android15-6.6" || "${{ inputs.version }}" == "android16-6.12" || "${{ inputs.version }}" == "android17-6.18" ]]; then
             KERNEL_STRING="$KERNEL_PART.${{ inputs.sublevel }}-$ANDROID_PART"
             sed -i '$d' scripts/setlocalversion && echo "echo \"$KERNEL_STRING-$BRAND\"" >> scripts/setlocalversion
           else
