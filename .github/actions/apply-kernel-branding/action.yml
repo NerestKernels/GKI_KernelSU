@@ -72,8 +72,26 @@ runs:
         fi
 
         if [ "$KEEP_KMI" = "true" ] && [ -n "$KMI" ]; then
+          # Preserve the upstream-computed SCM suffix (-g<sha>) and BUILD_NUMBER
+          # suffix (-ab<number>). Only insert Android/KMI between the kernel
+          # release and those dynamic suffixes.
           sed -i '$d' scripts/setlocalversion
-          printf 'echo "%s.%s-%s-%s"\n' "$KERNEL_PART" "${{ inputs.sublevel }}" "$ANDROID_PART" "$KMI" >> scripts/setlocalversion
+          cat >> scripts/setlocalversion <<EOF
+        if [ -z "\${res:-}" ]; then
+          echo "ERROR: setlocalversion did not compute res; cannot preserve SCM/build suffixes." >&2
+          exit 1
+        fi
+        kernel_base="${KERNEL_PART}.${{ inputs.sublevel }}"
+        case "\$res" in
+          "\$kernel_base"*) ;;
+          *)
+            echo "ERROR: setlocalversion res='\$res' does not start with expected kernel base '\$kernel_base'." >&2
+            exit 1
+            ;;
+        esac
+        local_suffix="\${res#"\$kernel_base"}"
+        echo "\${kernel_base}-${ANDROID_PART}-${KMI}\${local_suffix}"
+        EOF
         else
           if [[ "${{ inputs.version }}" == "android15-6.6" || "${{ inputs.version }}" == "android16-6.12" || "${{ inputs.version }}" == "android17-6.18" ]]; then
             KERNEL_STRING="$KERNEL_PART.${{ inputs.sublevel }}-$ANDROID_PART"
@@ -87,7 +105,7 @@ runs:
 
         chmod +x scripts/setlocalversion
         echo "--- setlocalversion tail ---"
-        tail -n 5 scripts/setlocalversion
+        tail -n 16 scripts/setlocalversion
 
     - name: Check built kernel version string
       id: check
