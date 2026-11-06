@@ -31,35 +31,63 @@ outputs:
 runs:
   using: "composite"
   steps:
-    - name: Apply Kernel Name Branding
+    - name: Resolve KMI generation and rewrite localversion
       shell: bash
       working-directory: ${{ github.workspace }}/kernel/common
       run: |
+        set -euo pipefail
+
         VERSION="${{ inputs.version }}"
-        ANDROID_PART=$(echo "$VERSION" | cut -d- -f1)
-        KERNEL_PART=$(echo "$VERSION" | cut -d- -f2)
+        ANDROID_PART="${VERSION%%-*}"
+        KERNEL_PART="${VERSION#*-}"
         KEEP_KMI="${{ inputs.keep_kmi }}"
 
+        # Resolve KMI generation from actual build config files. Do not silently
+        # fall back to the legacy format when the user explicitly requested KMI.
         KMI=""
         if [ "$KEEP_KMI" = "true" ]; then
-          KMI=$(grep -h "^KMI_GENERATION" build.config.common build.config.constants 2>/dev/null | head -n 1 | cut -d= -f2)
+          for file in \
+            build.config.common \
+            build.config.constants \
+            common/build.config.common \
+            common/build.config.constants; do
+            if [ -f "$file" ]; then
+              KMI="$(grep -E '^[[:space:]]*KMI_GENERATION[[:space:]]*=' "$file" 2>/dev/null | head -n1 | cut -d= -f2- | tr -d '[:space:]' || true)"
+              if [ -n "$KMI" ]; then
+                break
+              fi
+            fi
+          done
+
           if [ -z "$KMI" ]; then
-            echo "WARNING: KMI_GENERATION not found, falling back to legacy version format"
+            echo "ERROR: keep_kmi=true but KMI_GENERATION was not found in build.config.*; refusing to build without a KMI suffix." >&2
+            exit 1
           fi
+          echo "Detected KMI_GENERATION=$KMI"
         fi
 
-        if [ "$KEEP_KMI" = "true" ] && [ -n "$KMI" ] && grep -q 'scm_version}"' scripts/setlocalversion; then
-          sed -i '$d' scripts/setlocalversion && echo "echo \"$KERNEL_PART.${{ inputs.sublevel }}-$ANDROID_PART-$KMI\"" >> scripts/setlocalversion
+        if [ ! -f scripts/setlocalversion ]; then
+          echo "ERROR: scripts/setlocalversion not found in $PWD" >&2
+          exit 1
+        fi
+
+        if [ "$KEEP_KMI" = "true" ] && [ -n "$KMI" ]; then
+          sed -i '$d' scripts/setlocalversion
+          printf 'echo "%s.%s-%s-%s"\n' "$KERNEL_PART" "${{ inputs.sublevel }}" "$ANDROID_PART" "$KMI" >> scripts/setlocalversion
         else
           if [[ "${{ inputs.version }}" == "android15-6.6" || "${{ inputs.version }}" == "android16-6.12" || "${{ inputs.version }}" == "android17-6.18" ]]; then
             KERNEL_STRING="$KERNEL_PART.${{ inputs.sublevel }}-$ANDROID_PART"
-            sed -i '$d' scripts/setlocalversion && echo "echo \"$KERNEL_STRING\"" >> scripts/setlocalversion
+            sed -i '$d' scripts/setlocalversion
+            printf 'echo "%s"\n' "$KERNEL_STRING" >> scripts/setlocalversion
           else
-            sed -i '$d' scripts/setlocalversion && echo "echo \"-$ANDROID_PART\"" >> scripts/setlocalversion
+            sed -i '$d' scripts/setlocalversion
+            printf 'echo "-%s"\n' "$ANDROID_PART" >> scripts/setlocalversion
           fi
         fi
+
         chmod +x scripts/setlocalversion
-        tail -n 1 scripts/setlocalversion
+        echo "--- setlocalversion tail ---"
+        tail -n 5 scripts/setlocalversion
 
     - name: Check built kernel version string
       id: check
