@@ -1,5 +1,5 @@
-name: 'Keep Stock Kernel Version String'
-description: 'Leave the upstream kernel version string unchanged'
+name: 'Check Kernel Version String'
+description: 'Keep the kernel version string unchanged and optionally print it from the built image'
 inputs:
   variant:
     description: 'Accepted for compatibility; does not affect the kernel version string'
@@ -22,14 +22,46 @@ inputs:
   keep_kmi:
     description: 'Accepted for compatibility; ignored to preserve the stock kernel version string'
     required: false
+  image_path:
+    description: 'Optional built kernel image to inspect'
+    required: false
+    default: ''
+outputs:
+  kernel_uname:
+    description: 'Full Linux version line from the built image, when image_path is supplied'
+    value: ${{ steps.check.outputs.kernel_uname }}
 
 runs:
   using: 'composite'
   steps:
-    - name: Keep upstream kernel version string
+    - name: Keep upstream kernel version string unchanged
+      if: inputs.image_path == ''
       shell: bash
       working-directory: ${{ github.workspace }}/kernel/common
       run: |
         set -euo pipefail
         test -f scripts/setlocalversion
         echo 'Leaving scripts/setlocalversion unchanged; using the upstream kernel version string.'
+
+    - name: Check built kernel version string
+      id: check
+      if: inputs.image_path != ''
+      shell: bash
+      env:
+        IMG: ${{ inputs.image_path }}
+      run: |
+        set -euo pipefail
+        if [[ ! -s "$IMG" ]]; then
+          echo "ERROR: built kernel image not found or empty: $IMG" >&2
+          exit 1
+        fi
+
+        KERNEL_UNAME="$(strings "$IMG" | grep -E 'Linux version.*#' | tail -n1 || true)"
+        if [[ -z "$KERNEL_UNAME" ]]; then
+          echo "ERROR: Linux version line containing build number (#) not found in $IMG" >&2
+          exit 1
+        fi
+
+        echo "Kernel Uname: $KERNEL_UNAME"
+        echo "KERNEL_UNAME=$KERNEL_UNAME" >> "$GITHUB_ENV"
+        echo "kernel_uname=$KERNEL_UNAME" >> "$GITHUB_OUTPUT"
