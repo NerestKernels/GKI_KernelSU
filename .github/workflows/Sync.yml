@@ -27,8 +27,8 @@ jobs:
 
           # Сохраняем этот workflow: его нет в исходной папке .github,
           # и синхронизация иначе удалит его.
-          THIS_FILE="${GITHUB_WORKFLOW_REF##*/}"
-          THIS_FILE="${THIS_FILE%@*}"
+          THIS_FILE="${GITHUB_WORKFLOW_REF%%@*}"
+          THIS_FILE="${THIS_FILE##*/}"
 
           mkdir -p /tmp/keep
           cp ".github/workflows/${THIS_FILE}" "/tmp/keep/${THIS_FILE}"
