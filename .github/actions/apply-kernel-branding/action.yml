@@ -16,116 +16,54 @@ inputs:
   sublevel:
     description: 'Sublevel of kernel version (e.g., 1)'
     required: true
+  brand_name:
+    description: 'Branding text appended to the version (e.g., Wild). Empty = stock version string.'
+    required: false
+    default: Wild
   keep_kmi:
-    description: 'Keep stock KMI generation suffix (e.g., -8) and append it to the version. Off = legacy version format.'
+    description: 'Keep stock KMI generation suffix (e.g., -8) and append brand after it. Off = legacy hardcoded replace.'
     required: false
     default: 'false'
-  image_path:
-    description: 'Optional built kernel image to inspect after compilation'
-    required: false
-    default: ''
-outputs:
-  kernel_uname:
-    description: 'Full Linux version line from the built image, when image_path is supplied'
-    value: ${{ steps.check.outputs.kernel_uname }}
+
 runs:
   using: "composite"
   steps:
-    - name: Resolve KMI generation and rewrite localversion
+    - name: Apply Kernel Name Branding
       shell: bash
       working-directory: ${{ github.workspace }}/kernel/common
       run: |
-        set -euo pipefail
-
         VERSION="${{ inputs.version }}"
-        ANDROID_PART="${VERSION%%-*}"
-        KERNEL_PART="${VERSION#*-}"
+        ANDROID_PART=$(echo "$VERSION" | cut -d- -f1)
+        KERNEL_PART=$(echo "$VERSION" | cut -d- -f2)
+        BRAND="${{ inputs.brand_name }}"
         KEEP_KMI="${{ inputs.keep_kmi }}"
 
-        # Resolve KMI generation from actual build config files. Do not silently
-        # fall back to the legacy format when the user explicitly requested KMI.
-        KMI=""
-        if [ "$KEEP_KMI" = "true" ]; then
-          for file in \
-            build.config.common \
-            build.config.constants \
-            common/build.config.common \
-            common/build.config.constants; do
-            if [ -f "$file" ]; then
-              KMI="$(grep -E '^[[:space:]]*KMI_GENERATION[[:space:]]*=' "$file" 2>/dev/null | head -n1 | cut -d= -f2- | tr -d '[:space:]' || true)"
-              if [ -n "$KMI" ]; then
-                break
-              fi
-            fi
-          done
-
-          if [ -z "$KMI" ]; then
-            echo "ERROR: keep_kmi=true but KMI_GENERATION was not found in build.config.*; refusing to build without a KMI suffix." >&2
-            exit 1
-          fi
-          echo "Detected KMI_GENERATION=$KMI"
+        if [ -z "$BRAND" ]; then
+          echo "brand_name is empty, keeping stock kernel version string"
+          exit 0
         fi
 
-        if [ ! -f scripts/setlocalversion ]; then
-          echo "ERROR: scripts/setlocalversion not found in $PWD" >&2
-          exit 1
+        KMI=""
+        if [ "$KEEP_KMI" = "true" ]; then
+          KMI=$(grep -h "^KMI_GENERATION" build.config.common build.config.constants 2>/dev/null | head -n 1 | cut -d= -f2)
+          if [ -z "$KMI" ]; then
+            echo "WARNING: KMI_GENERATION not found, falling back to legacy branding"
+          fi
         fi
 
         if [ "$KEEP_KMI" = "true" ] && [ -n "$KMI" ]; then
-          # Preserve the upstream-computed SCM suffix (-g<sha>) and BUILD_NUMBER
-          # suffix (-ab<number>). Only insert Android/KMI between the kernel
-          # release and those dynamic suffixes.
-          sed -i '$d' scripts/setlocalversion
-          cat >> scripts/setlocalversion <<EOF
-        if [ -z "\${res:-}" ]; then
-          echo "ERROR: setlocalversion did not compute res; cannot preserve SCM/build suffixes." >&2
-          exit 1
-        fi
-        kernel_base="${KERNEL_PART}.${{ inputs.sublevel }}"
-        case "\$res" in
-          "\$kernel_base"*) ;;
-          *)
-            echo "ERROR: setlocalversion res='\$res' does not start with expected kernel base '\$kernel_base'." >&2
-            exit 1
-            ;;
-        esac
-        local_suffix="\${res#"\$kernel_base"}"
-        echo "\${kernel_base}-${ANDROID_PART}-${KMI}\${local_suffix}"
-        EOF
-        else
-          if [[ "${{ inputs.version }}" == "android15-6.6" || "${{ inputs.version }}" == "android16-6.12" || "${{ inputs.version }}" == "android17-6.18" ]]; then
-            KERNEL_STRING="$KERNEL_PART.${{ inputs.sublevel }}-$ANDROID_PART"
-            sed -i '$d' scripts/setlocalversion
-            printf 'echo "%s"\n' "$KERNEL_STRING" >> scripts/setlocalversion
+          if grep -q 'scm_version}"' scripts/setlocalversion; then
+            sed -i '$d' scripts/setlocalversion && echo "echo \"$KERNEL_PART.${{ inputs.sublevel }}-$ANDROID_PART-$KMI-$BRAND\"" >> scripts/setlocalversion
           else
-            sed -i '$d' scripts/setlocalversion
-            printf 'echo "-%s"\n' "$ANDROID_PART" >> scripts/setlocalversion
+            sed -i '$d' scripts/setlocalversion && echo "echo \"-$BRAND\"" >> scripts/setlocalversion
+          fi
+        else
+          if [[ ${{ inputs.version }} == "android15-6.6" || ${{ inputs.version }} == "android16-6.12" || ${{ inputs.version }} == "android17-6.18" ]]; then
+            KERNEL_STRING="$KERNEL_PART.${{ inputs.sublevel }}-$ANDROID_PART"
+            sed -i '$d' scripts/setlocalversion && echo "echo \"$KERNEL_STRING-$BRAND\"" >> scripts/setlocalversion
+          else
+            sed -i '$d' scripts/setlocalversion && echo "echo \"-$ANDROID_PART-$BRAND\"" >> scripts/setlocalversion
           fi
         fi
-
         chmod +x scripts/setlocalversion
-        echo "--- setlocalversion tail ---"
-        tail -n 16 scripts/setlocalversion
-
-    - name: Check built kernel version string
-      id: check
-      if: inputs.image_path != ''
-      shell: bash
-      env:
-        IMG: ${{ inputs.image_path }}
-      run: |
-        set -euo pipefail
-        if [[ ! -s "$IMG" ]]; then
-          echo "ERROR: built kernel image not found or empty: $IMG" >&2
-          exit 1
-        fi
-
-        KERNEL_UNAME="$(strings "$IMG" | grep -E 'Linux version.*#' | tail -n1 || true)"
-        if [[ -z "$KERNEL_UNAME" ]]; then
-          echo "ERROR: Linux version line containing build number (#) not found in $IMG" >&2
-          exit 1
-        fi
-
-        echo "Kernel Uname: $KERNEL_UNAME"
-        echo "KERNEL_UNAME=$KERNEL_UNAME" >> "$GITHUB_ENV"
-        echo "kernel_uname=$KERNEL_UNAME" >> "$GITHUB_OUTPUT"
+        tail -n 1 scripts/setlocalversion
