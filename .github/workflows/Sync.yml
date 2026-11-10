@@ -15,7 +15,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: main
-          token: ${{ github.token }}
+          token: ${{ secrets.PAT_TROP }}
           fetch-depth: 0
 
       - name: Sync .github from feat/usb-arsenal
