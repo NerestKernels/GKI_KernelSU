@@ -1,0 +1,56 @@
+name: Sync .github from WildKernels
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          token: ${{ secrets.PAT_TROP }}
+          fetch-depth: 0
+
+      - name: Sync .github from feat/usb-arsenal
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Сохраняем этот workflow: его нет в исходной папке .github,
+          # и синхронизация иначе удалит его.
+          THIS_FILE="${GITHUB_WORKFLOW_REF##*/}"
+          THIS_FILE="${THIS_FILE%@*}"
+
+          mkdir -p /tmp/keep
+          cp ".github/workflows/${THIS_FILE}" "/tmp/keep/${THIS_FILE}"
+
+          SRC="/tmp/wildkernels"
+          rm -rf "$SRC"
+          git clone --depth=1 --branch feat/usb-arsenal \
+            https://github.com/WildKernels/GKI_KernelSU_SUSFS.git "$SRC"
+
+          mkdir -p .github
+          rsync -a --delete "$SRC/.github/" .github/
+          rm -rf "$SRC"
+
+          mkdir -p .github/workflows
+          cp "/tmp/keep/${THIS_FILE}" ".github/workflows/${THIS_FILE}"
+
+          git add .github
+
+          if git diff --cached --quiet; then
+            echo "No .github changes to commit."
+            exit 0
+          fi
+
+          git commit -m "Sync .github from WildKernels feat/usb-arsenal"
+          git push origin main
