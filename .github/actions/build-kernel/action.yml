@@ -69,8 +69,8 @@ runs:
           # build.sh has no fragment mechanism, but it does source
           # BUILD_CONFIG_FRAGMENTS after the build config (_setup_env.sh:56-58).
           # Layering one there sets POST_DEFCONFIG_CMDS without editing upstream files.
-          cp "${{ github.workspace }}/.github/actions/build-kernel/legacy-wild.config" wild_build.config
-          export BUILD_CONFIG_FRAGMENTS="wild_build.config"
+          cp "${{ github.workspace }}/.github/actions/build-kernel/legacy-thefloresto.config" thefloresto_build.config
+          export BUILD_CONFIG_FRAGMENTS="thefloresto_build.config"
           BUILD_GKI_ARTIFACTS="" \
           BUILD_GKI_CERTIFICATION_TOOLS=0 \
           BUILD_SYSTEM_DLKM=0 \
@@ -95,7 +95,7 @@ runs:
             --lto=full \        
             "${PAGE_SIZE_FLAGS[@]}" \
             --disk_cache=/home/runner/.cache/bazel \
-            --defconfig_fragment=//common:wild_defconfig.fragment \
+            --defconfig_fragment=//common:thefloresto_defconfig.fragment \
             //common:kernel_aarch64
         fi
 
