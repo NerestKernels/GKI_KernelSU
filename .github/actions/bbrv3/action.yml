@@ -118,4 +118,4 @@ runs:
         fi
         printf 'CONFIG_TCP_CONG_BBR3=y\n' \
           | python3 "${{ github.workspace }}/.github/scripts/append_fragment.py" - \
-              --dest wild_defconfig.fragment --label bbrv3
+              --dest thefloresto_defconfig.fragment --label bbrv3
