@@ -100,11 +100,10 @@ runs:
         fi
         tools/bazel build \
           --config=fast \
-          --lto=full \        
+          --lto=full \
           "${PAGE_SIZE_FLAGS[@]}" \
           --defconfig_fragment=//common:wild_defconfig.fragment \
           //common:kernel_aarch64
-          
     - name: 'Verify Page Size in Generated .config'
       shell: bash
       working-directory: ${{ github.workspace }}/kernel
