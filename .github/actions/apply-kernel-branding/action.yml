@@ -46,4 +46,5 @@ runs:
 
         echo "KERNEL_BUILD_USER=$BUILD_USER" >> "$GITHUB_ENV"
         echo "KERNEL_BUILD_HOST=build-host" >> "$GITHUB_ENV"
-        echo "Build identity: $BUILD_USER@build-host"
+        echo "Build identity: $BUILD_USER"
+        echo "Build host: build-host"
