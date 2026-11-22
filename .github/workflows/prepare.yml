@@ -334,7 +334,6 @@ jobs:
       anykernel3_commit: ${{ inputs.anykernel3_commit }}
       droidspaces_commit: ${{ inputs.droidspaces_commit }}
       brand_name: ${{ inputs.brand_name }}
-      keep_kmi: ${{ inputs.keep_kmi }}
       allow_version_mismatch: ${{ inputs.allow_version_mismatch }}
       page_size: ${{ inputs.page_size }}
       stock_config_artifact: stock-configs-${{ needs.generate-matrix.outputs.version_slug }}
