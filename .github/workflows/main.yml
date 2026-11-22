@@ -743,7 +743,6 @@ jobs:
       anykernel3_commit: ${{ needs.resolve-sources.outputs.anykernel3_commit }}
       droidspaces_commit: ${{ needs.resolve-sources.outputs.droidspaces_commit }}
       brand_name: ${{ github.event_name == 'schedule' && 'Wild' || inputs.brand_name }}
-      keep_kmi: ${{ inputs.keep_kmi || false }}
       os_patch_level: ${{ inputs.os_patch_level || 'All' }}
       allow_version_mismatch: ${{ inputs.allow_version_mismatch || false }}
       page_size: ${{ inputs.page_size || '4k' }}
@@ -773,7 +772,6 @@ jobs:
       anykernel3_commit: ${{ needs.resolve-sources.outputs.anykernel3_commit }}
       droidspaces_commit: ${{ needs.resolve-sources.outputs.droidspaces_commit }}
       brand_name: ${{ github.event_name == 'schedule' && 'Wild' || inputs.brand_name }}
-      keep_kmi: ${{ inputs.keep_kmi || false }}
       os_patch_level: ${{ inputs.os_patch_level || 'All' }}
       allow_version_mismatch: ${{ inputs.allow_version_mismatch || false }}
       page_size: ${{ inputs.page_size || '4k' }}
@@ -803,7 +801,6 @@ jobs:
       anykernel3_commit: ${{ needs.resolve-sources.outputs.anykernel3_commit }}
       droidspaces_commit: ${{ needs.resolve-sources.outputs.droidspaces_commit }}
       brand_name: ${{ github.event_name == 'schedule' && 'Wild' || inputs.brand_name }}
-      keep_kmi: ${{ inputs.keep_kmi || false }}
       os_patch_level: ${{ inputs.os_patch_level || 'All' }}
       allow_version_mismatch: ${{ inputs.allow_version_mismatch || false }}
       page_size: ${{ inputs.page_size || '4k' }}
@@ -833,7 +830,6 @@ jobs:
       anykernel3_commit: ${{ needs.resolve-sources.outputs.anykernel3_commit }}
       droidspaces_commit: ${{ needs.resolve-sources.outputs.droidspaces_commit }}
       brand_name: ${{ github.event_name == 'schedule' && 'Wild' || inputs.brand_name }}
-      keep_kmi: ${{ inputs.keep_kmi || false }}
       os_patch_level: ${{ inputs.os_patch_level || 'All' }}
       allow_version_mismatch: ${{ inputs.allow_version_mismatch || false }}
       page_size: ${{ inputs.page_size || '4k' }}
@@ -863,7 +859,6 @@ jobs:
       anykernel3_commit: ${{ needs.resolve-sources.outputs.anykernel3_commit }}
       droidspaces_commit: ${{ needs.resolve-sources.outputs.droidspaces_commit }}
       brand_name: ${{ github.event_name == 'schedule' && 'Wild' || inputs.brand_name }}
-      keep_kmi: ${{ inputs.keep_kmi || false }}
       os_patch_level: ${{ inputs.os_patch_level || 'All' }}
       allow_version_mismatch: ${{ inputs.allow_version_mismatch || false }}
       page_size: ${{ inputs.page_size || '4k' }}
@@ -893,7 +888,6 @@ jobs:
       anykernel3_commit: ${{ needs.resolve-sources.outputs.anykernel3_commit }}
       droidspaces_commit: ${{ needs.resolve-sources.outputs.droidspaces_commit }}
       brand_name: ${{ github.event_name == 'schedule' && 'Wild' || inputs.brand_name }}
-      keep_kmi: ${{ inputs.keep_kmi || false }}
       os_patch_level: ${{ inputs.os_patch_level || 'All' }}
       allow_version_mismatch: ${{ inputs.allow_version_mismatch || false }}
       page_size: ${{ inputs.page_size || '4k' }}
@@ -928,7 +922,6 @@ jobs:
       anykernel3_commit: ${{ needs.resolve-sources.outputs.anykernel3_commit }}
       droidspaces_commit: ${{ needs.resolve-sources.outputs.droidspaces_commit }}
       brand_name: ${{ github.event_name == 'schedule' && 'Wild' || inputs.brand_name }}
-      keep_kmi: ${{ inputs.keep_kmi || false }}
       os_patch_level: ${{ inputs.os_patch_level || 'All' }}
       allow_version_mismatch: ${{ inputs.allow_version_mismatch || false }}
       page_size: ${{ inputs.page_size || '4k' }}
