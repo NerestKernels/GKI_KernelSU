@@ -49,10 +49,6 @@ on:
         description: "Kernel Branding (empty = stock version string)"
         type: string
         default: TheFloresto
-      keep_kmi:
-        description: "Keep stock KMI generation suffix in kernel version (fix #265)"
-        type: boolean
-        default: false
       commit_mode:
         description: "latest = branch tips, verified = audited pins"
         required: false
