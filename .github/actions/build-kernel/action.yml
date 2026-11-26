@@ -17,19 +17,6 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Configure Git for large GKI source trees
-      shell: bash
-      run: |
-        set -euo pipefail
-        git config --global feature.manyFiles true
-        git config --global protocol.version 2
-        git config --global fetch.parallel 8
-        git config --global http.maxRequests 8
-        git config --global http.version HTTP/2
-        git config --global pack.threads 0
-        # Do not disable TLS certificate validation: builds should fail safely
-        # rather than silently accepting a man-in-the-middle connection.
-
     - name: Install latest Neutron Clang
       shell: bash
       env:
