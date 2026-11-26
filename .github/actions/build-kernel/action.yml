@@ -1,5 +1,5 @@
 name: 'Build Kernel'
-description: 'Builds GKI kernels using build.sh where available, with the latest Neutron Clang'
+description: 'Build GKI kernels with the latest Neutron Clang and a direct LLVM Kbuild'
 inputs:
   version:
     description: 'Kernel config version (e.g., android14-6.1)'
@@ -14,6 +14,7 @@ inputs:
     required: false
     type: boolean
     default: false
+
 runs:
   using: composite
   steps:
@@ -25,141 +26,125 @@ runs:
         set -euo pipefail
         mkdir -p "$NEUTRON_DIR"
         cd "$NEUTRON_DIR"
+
         curl --fail --location --retry 5 --retry-delay 3 --retry-all-errors \
           https://raw.githubusercontent.com/Neutron-Toolchains/antman/main/antman \
           --output antman
         chmod +x antman
+
         ./antman --sync=latest --noconfirm --noprogress
+
         test -x "$NEUTRON_DIR/bin/clang"
         test -x "$NEUTRON_DIR/bin/ld.lld"
+
         echo "$NEUTRON_DIR/bin" >> "$GITHUB_PATH"
         echo "NEUTRON_CLANG_BIN=$NEUTRON_DIR/bin" >> "$GITHUB_ENV"
+
         "$NEUTRON_DIR/bin/clang" --version | head -n 1
         grep -A1 '^\[tag\]' "$NEUTRON_DIR/build.info" || true
 
-    - name: 'Build Kernel (build.sh)'
-      if: startsWith(inputs.version, 'android12') || startsWith(inputs.version, 'android13') || startsWith(inputs.version, 'android14') || startsWith(inputs.version, 'android15') || startsWith(inputs.version, 'android16') || startsWith(inputs.version, 'android17')
+    - name: Build GKI kernel with LLVM
       shell: bash
       working-directory: ${{ github.workspace }}/kernel
       run: |
         set -euo pipefail
-
-        if [ ! -f "build/build.sh" ]; then
-          echo "::error title=unsupported build.sh::build/build.sh does not exist in this kernel tree"
-          exit 1
-        fi
 
         test -x "$NEUTRON_CLANG_BIN/clang"
         test -x "$NEUTRON_CLANG_BIN/ld.lld"
 
         export PATH="$NEUTRON_CLANG_BIN:$PATH"
-        export LLVM=1 LLVM_IAS=1
-        export ARCH=arm64 SUBARCH=arm64
+        export ARCH=arm64
+        export SUBARCH=arm64
+        export LLVM=1
+        export LLVM_IAS=1
         export CROSS_COMPILE=aarch64-linux-gnu-
         export CROSS_COMPILE_COMPAT=aarch64-linux-gnu-
-        export CC="ccache $NEUTRON_CLANG_BIN/clang"
-        export CXX="ccache $NEUTRON_CLANG_BIN/clang++"
-        export HOSTCC="ccache $NEUTRON_CLANG_BIN/clang"
-        export HOSTCXX="ccache $NEUTRON_CLANG_BIN/clang++"
         export LD="$NEUTRON_CLANG_BIN/ld.lld"
+        export HOSTLD="$NEUTRON_CLANG_BIN/ld.lld"
         export AR="$NEUTRON_CLANG_BIN/llvm-ar"
         export NM="$NEUTRON_CLANG_BIN/llvm-nm"
         export OBJCOPY="$NEUTRON_CLANG_BIN/llvm-objcopy"
         export OBJDUMP="$NEUTRON_CLANG_BIN/llvm-objdump"
         export STRIP="$NEUTRON_CLANG_BIN/llvm-strip"
+        export CC="ccache $NEUTRON_CLANG_BIN/clang"
+        export CXX="ccache $NEUTRON_CLANG_BIN/clang++"
+        export HOSTCC="ccache $NEUTRON_CLANG_BIN/clang"
+        export HOSTCXX="ccache $NEUTRON_CLANG_BIN/clang++"
 
-        echo "Using Neutron: $($NEUTRON_CLANG_BIN/clang --version | head -n1)"
-        echo "Using lld: $($NEUTRON_CLANG_BIN/ld.lld --version)"
+        echo "Compiler:"
+        $NEUTRON_CLANG_BIN/clang --version | head -n 1
+        ccache -s || true
 
-        BUILD_CONFIG_FILE="common/build.config.gki.aarch64"
-        if [ ! -f "$BUILD_CONFIG_FILE" ]; then
-          echo "::error title=missing build config::$BUILD_CONFIG_FILE not found"
-          exit 1
-        fi
+        MAKE_JOBS="$(nproc --all)"
+        OUT=out
+        mkdir -p "$OUT"
 
-        if ! grep -q 'Neutron Clang injected by CI' "$BUILD_CONFIG_FILE"; then
-          printf '\n%s\nCLANG_PREBUILT_BIN="%s"\n' \
-            '# Neutron Clang injected by CI' "$NEUTRON_CLANG_BIN" >> "$BUILD_CONFIG_FILE"
-        fi
+        make -j"$MAKE_JOBS" \
+          LLVM=1 LLVM_IAS=1 \
+          LD="$LD" HOSTLD="$HOSTLD" \
+          AR="$AR" NM="$NM" \
+          OBJCOPY="$OBJCOPY" OBJDUMP="$OBJDUMP" STRIP="$STRIP" \
+          CC="$CC" CXX="$CXX" \
+          HOSTCC="$HOSTCC" HOSTCXX="$HOSTCXX" \
+          O="$OUT" \
+          gki_defconfig
 
-        cp "${{ github.workspace }}/.github/actions/build-kernel/legacy-fragment.config" legacy-fragment.config
-        export BUILD_CONFIG_FRAGMENTS="legacy-fragment.config"
-
-        if [ -n "${SOURCE_DATE_EPOCH:-}" ]; then
-          export KBUILD_BUILD_TIMESTAMP="${KBUILD_BUILD_TIMESTAMP:-@0}"
-        fi
-
-        BUILD_GKI_ARTIFACTS="" \
-        BUILD_GKI_CERTIFICATION_TOOLS=0 \
-        BUILD_SYSTEM_DLKM=0 \
-        SKIP_VENDOR_BOOT=1 \
-        SKIP_EXT_MODULES=1 \
-        SKIP_CP_KERNEL_HDR=1 \
-        OUT_DIR="/home/runner/out" \
-        LTO=thin \
-        BUILD_CONFIG="$BUILD_CONFIG_FILE" \
-        build/build.sh -j"$(nproc)"
-
-    - name: 'Build Kernel (Kleaf)'
-      if: false
-      shell: bash
-      working-directory: ${{ github.workspace }}/kernel
-      run: |
-        echo "Kleaf fallback is disabled: build.sh is the required build path for this action"
-
-    - name: 'Verify Page Size in Generated .config'
-      shell: bash
-      working-directory: ${{ github.workspace }}/kernel
-      run: |
-        set -euo pipefail
-        PAGE_SIZE="${{ inputs.page_size }}"
-        CONFIG_FILE=""
-
-        for candidate in \
-          /home/runner/out/common/.config \
-          /home/runner/out/.config \
-          bazel-bin/common/kernel_aarch64_config/out_dir/.config; do
-          if [ -f "$candidate" ]; then CONFIG_FILE="$candidate"; break; fi
-        done
-
-        if [ -z "$CONFIG_FILE" ]; then
-          CONFIG_FILE="$(find /home/runner/out -maxdepth 5 -name .config -type f 2>/dev/null | head -n1 || true)"
-        fi
-
-        if [ -z "$CONFIG_FILE" ]; then
-          echo "::error title=missing config::could not locate the generated .config"
-          exit 1
-        fi
-
-        echo "Verifying page size using $CONFIG_FILE"
-        if [ "$PAGE_SIZE" = "16k" ]; then
-          want_on="CONFIG_ARM64_16K_PAGES=y"
-          want_off="# CONFIG_ARM64_4K_PAGES is not set"
+        if [ -f common/wild_defconfig.fragment ]; then
+          scripts/kconfig/merge_config.sh \
+            -m -O "$OUT" "$OUT/.config" \
+            common/wild_defconfig.fragment
         else
-          want_on="CONFIG_ARM64_4K_PAGES=y"
-          want_off="# CONFIG_ARM64_16K_PAGES is not set"
+          echo "::warning::common/wild_defconfig.fragment not found"
         fi
 
-        grep -qx "$want_on" "$CONFIG_FILE" || { echo "Missing $want_on" >&2; exit 1; }
-        grep -qx "$want_off" "$CONFIG_FILE" || { echo "Missing $want_off" >&2; exit 1; }
+        make -j"$MAKE_JOBS" \
+          LLVM=1 LLVM_IAS=1 \
+          LD="$LD" HOSTLD="$HOSTLD" \
+          AR="$AR" NM="$NM" \
+          OBJCOPY="$OBJCOPY" OBJDUMP="$OBJDUMP" STRIP="$STRIP" \
+          CC="$CC" CXX="$CXX" \
+          HOSTCC="$HOSTCC" HOSTCXX="$HOSTCXX" \
+          O="$OUT" \
+          olddefconfig
 
-    - name: 'Gather Build Artifacts'
+        make -j"$MAKE_JOBS" \
+          LLVM=1 LLVM_IAS=1 \
+          LD="$LD" HOSTLD="$HOSTLD" \
+          AR="$AR" NM="$NM" \
+          OBJCOPY="$OBJCOPY" OBJDUMP="$OBJDUMP" STRIP="$STRIP" \
+          CC="$CC" CXX="$CXX" \
+          HOSTCC="$HOSTCC" HOSTCXX="$HOSTCXX" \
+          O="$OUT" \
+          Image modules 2>&1 | tee build.log
+
+        if [ -f "$OUT/arch/arm64/boot/Image" ]; then
+          cp "$OUT/arch/arm64/boot/Image" \
+            "${{ github.workspace }}/AnyKernel3/Image"
+        elif [ -f "$OUT/dist/Image" ]; then
+          cp "$OUT/dist/Image" \
+            "${{ github.workspace }}/AnyKernel3/Image"
+        else
+          tail -n 100 build.log || true
+          echo "::error::Kernel Image was not produced"
+          exit 1
+        fi
+
+        echo "Post-build ccache statistics:"
+        ccache -s
+
+    - name: Verify generated configuration
       shell: bash
       working-directory: ${{ github.workspace }}/kernel
       run: |
         set -euo pipefail
 
-        for candidate in \
-          /home/runner/out/dist/Image \
-          /home/runner/out/common/arch/arm64/boot/Image \
-          /home/runner/out/arch/arm64/boot/Image \
-          out/arch/arm64/boot/Image; do
-          if [ -f "$candidate" ]; then
-            echo "Found Image at $candidate"
-            cp "$candidate" "${{ github.workspace }}/AnyKernel3/Image"
-            exit 0
-          fi
-        done
+        CONFIG_FILE="out/.config"
+        test -f "$CONFIG_FILE"
 
-        echo "::error title=missing kernel image::built GKI Image was not found"
-        exit 1
+        if [ "${{ inputs.page_size }}" = "16k" ]; then
+          grep -qx 'CONFIG_ARM64_16K_PAGES=y' "$CONFIG_FILE"
+          grep -qx '# CONFIG_ARM64_4K_PAGES is not set' "$CONFIG_FILE"
+        else
+          grep -qx 'CONFIG_ARM64_4K_PAGES=y' "$CONFIG_FILE"
+          grep -qx '# CONFIG_ARM64_16K_PAGES is not set' "$CONFIG_FILE"
+        fi        
