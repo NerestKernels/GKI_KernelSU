@@ -1,5 +1,5 @@
 name: 'Setup Build Environment'
-description: 'Clones dependencies and exports mkbootimg/avbtool paths'
+description: 'Installs build dependencies, clones dependencies, and exports build paths'
 
 inputs:
   version:
@@ -20,12 +20,25 @@ inputs:
 runs:
   using: composite
   steps:
+    - name: Install Minimal Dependencies
+      shell: bash
+      run: |
+        set -euo pipefail
+        echo "::group::Install dependencies"
+        sudo apt-get -o Acquire::Retries=3 update -qq
+        sudo DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=3 install -y --no-install-recommends \
+          git curl ca-certificates build-essential clang lld flex bison \
+          libelf-dev libssl-dev libncurses-dev zlib1g-dev liblz4-tool zstd \
+          libxml2-utils rsync unzip dwarves file python3 ccache jq bc dos2unix \
+          kmod libdw-dev elfutils pigz wget
+        sudo apt-get clean
+        echo "✅ Dependencies installed"
+        echo "::endgroup::"
+
     - shell: bash
       run: |
         set -euo pipefail
 
-        # Faster, protocol-v2 Git operations for the large GKI source checkout.
-        # Keep TLS verification enabled; never trade transport security for speed.
         git config --global user.name "github-actions[bot]"
         git config --global user.email "github-actions[bot]@users.noreply.github.com"
         git config --global feature.manyFiles true
@@ -37,7 +50,7 @@ runs:
 
         mkdir -p "${{ github.workspace }}/kernel"
         mkdir -p "${{ github.workspace }}/git-repo"
-        # Retry transient network errors (up to 5 attempts, 5s backoff).
+
         retry() {
           local n=0
           until [ "$n" -ge 5 ]; do
@@ -48,7 +61,10 @@ runs:
           done
           return 1
         }
-        retry curl --fail --location --retry 5 --retry-delay 3 --retry-all-errors https://storage.googleapis.com/git-repo-downloads/repo -o "${{ github.workspace }}/git-repo/repo"
+
+        retry curl --fail --location --retry 5 --retry-delay 3 --retry-all-errors \
+          https://storage.googleapis.com/git-repo-downloads/repo \
+          -o "${{ github.workspace }}/git-repo/repo"
         chmod +x "${{ github.workspace }}/git-repo/repo"
         echo "${{ github.workspace }}/git-repo" >> "$GITHUB_PATH"
 
@@ -57,7 +73,7 @@ runs:
         if [ -n "${{ inputs.kernel_patches_commit }}" ]; then
           retry git -C "${{ github.workspace }}/kernel_patches" fetch --depth=1 origin "${{ inputs.kernel_patches_commit }}"
           git -C "${{ github.workspace }}/kernel_patches" checkout "${{ inputs.kernel_patches_commit }}"
-          [ "$(git -C "${{ github.workspace }}/kernel_patches" rev-parse HEAD)" = "${{ inputs.kernel_patches_commit}" ] || { echo "kernel_patches pin mismatch" >&2; exit 1; }
+          [ "$(git -C "${{ github.workspace }}/kernel_patches" rev-parse HEAD)" = "${{ inputs.kernel_patches_commit }}" ] || { echo "kernel_patches pin mismatch" >&2; exit 1; }
         fi
 
         if [ -d "${{ github.workspace }}/AnyKernel3" ]; then rm -rf "${{ github.workspace }}/AnyKernel3"; fi
@@ -65,5 +81,5 @@ runs:
         if [ -n "${{ inputs.anykernel3_commit }}" ]; then
           retry git -C "${{ github.workspace }}/AnyKernel3" fetch --depth=1 origin "${{ inputs.anykernel3_commit }}"
           git -C "${{ github.workspace }}/AnyKernel3" checkout "${{ inputs.anykernel3_commit }}"
-          [ "$(git -C "${{ github.workspace }}/AnyKernel3" rev-parse HEAD)" = "${{ inputs.anykernel3_commit}" ] || { echo "AnyKernel3 pin mismatch" >&2; exit 1; }
+          [ "$(git -C "${{ github.workspace }}/AnyKernel3" rev-parse HEAD)" = "${{ inputs.anykernel3_commit }}" ] || { echo "AnyKernel3 pin mismatch" >&2; exit 1; }
         fi
