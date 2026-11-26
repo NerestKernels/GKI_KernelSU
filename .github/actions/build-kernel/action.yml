@@ -78,11 +78,8 @@ runs:
         fi
 
         if ! grep -q 'Neutron Clang injected by CI' "$BUILD_CONFIG_FILE"; then
-          cat >> "$BUILD_CONFIG_FILE" <<EOF
-
-# Neutron Clang injected by CI
-CLANG_PREBUILT_BIN="$NEUTRON_CLANG_BIN"
-EOF
+          printf '\n%s\nCLANG_PREBUILT_BIN="%s"\n' \
+            '# Neutron Clang injected by CI' "$NEUTRON_CLANG_BIN" >> "$BUILD_CONFIG_FILE"
         fi
 
         cp "${{ github.workspace }}/.github/actions/build-kernel/legacy-fragment.config" legacy-fragment.config
