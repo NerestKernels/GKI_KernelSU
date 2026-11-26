@@ -73,7 +73,7 @@ runs:
         SKIP_EXT_MODULES=1 \
         SKIP_CP_KERNEL_HDR=1 \
         OUT_DIR="/home/runner/out" \
-        LTO=full \
+        LTO=thin \
         BUILD_CONFIG="$BUILD_CONFIG_FILE" \
         build/build.sh -j"$(nproc)"
 
@@ -105,7 +105,7 @@ runs:
         fi
         tools/bazel build \
           --config=fast \
-          --lto=full \
+          --lto=thin \
           --repo_env="CLANG_PREBUILT_BIN=$NEUTRON_CLANG_BIN" \
           --repo_env="PATH=$PATH" \
           --action_env="PATH=$PATH" \
