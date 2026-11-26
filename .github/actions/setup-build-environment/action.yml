@@ -24,8 +24,16 @@ runs:
       run: |
         set -euo pipefail
 
+        # Faster, protocol-v2 Git operations for the large GKI source checkout.
+        # Keep TLS verification enabled; never trade transport security for speed.
         git config --global user.name "github-actions[bot]"
         git config --global user.email "github-actions[bot]@users.noreply.github.com"
+        git config --global feature.manyFiles true
+        git config --global protocol.version 2
+        git config --global fetch.parallel 8
+        git config --global http.maxRequests 8
+        git config --global http.version HTTP/2
+        git config --global pack.threads 0
 
         mkdir -p "${{ github.workspace }}/kernel"
         mkdir -p "${{ github.workspace }}/git-repo"
@@ -40,33 +48,22 @@ runs:
           done
           return 1
         }
-        retry curl -L https://storage.googleapis.com/git-repo-downloads/repo -o "${{ github.workspace }}/git-repo/repo"
+        retry curl --fail --location --retry 5 --retry-delay 3 --retry-all-errors https://storage.googleapis.com/git-repo-downloads/repo -o "${{ github.workspace }}/git-repo/repo"
         chmod +x "${{ github.workspace }}/git-repo/repo"
         echo "${{ github.workspace }}/git-repo" >> "$GITHUB_PATH"
 
         if [ -d "${{ github.workspace }}/kernel_patches" ]; then rm -rf "${{ github.workspace }}/kernel_patches"; fi
-        retry git clone https://github.com/WildKernels/kernel_patches.git "${{ github.workspace }}/kernel_patches"
+        retry git clone --filter=blob:none https://github.com/WildKernels/kernel_patches.git "${{ github.workspace }}/kernel_patches"
         if [ -n "${{ inputs.kernel_patches_commit }}" ]; then
-          # Same retry as the clone above: fetching a specific SHA is the call
-          # most likely to need a second round trip, since upstreams that don't
-          # have the SHA at a branch tip reject the first shallow fetch.
           retry git -C "${{ github.workspace }}/kernel_patches" fetch --depth=1 origin "${{ inputs.kernel_patches_commit }}"
           git -C "${{ github.workspace }}/kernel_patches" checkout "${{ inputs.kernel_patches_commit }}"
-          [ "$(git -C "${{ github.workspace }}/kernel_patches" rev-parse HEAD)" = "${{ inputs.kernel_patches_commit }}" ] || { echo "kernel_patches pin mismatch" >&2; exit 1; }
+          [ "$(git -C "${{ github.workspace }}/kernel_patches" rev-parse HEAD)" = "${{ inputs.kernel_patches_commit}" ] || { echo "kernel_patches pin mismatch" >&2; exit 1; }
         fi
 
         if [ -d "${{ github.workspace }}/AnyKernel3" ]; then rm -rf "${{ github.workspace }}/AnyKernel3"; fi
-        retry git clone https://github.com/WildKernels/AnyKernel3.git -b gki-2.0 "${{ github.workspace }}/AnyKernel3"
+        retry git clone --filter=blob:none https://github.com/WildKernels/AnyKernel3.git -b gki-2.0 "${{ github.workspace }}/AnyKernel3"
         if [ -n "${{ inputs.anykernel3_commit }}" ]; then
-          # Same retry as the clone above.
           retry git -C "${{ github.workspace }}/AnyKernel3" fetch --depth=1 origin "${{ inputs.anykernel3_commit }}"
           git -C "${{ github.workspace }}/AnyKernel3" checkout "${{ inputs.anykernel3_commit }}"
-          [ "$(git -C "${{ github.workspace }}/AnyKernel3" rev-parse HEAD)" = "${{ inputs.anykernel3_commit }}" ] || { echo "AnyKernel3 pin mismatch" >&2; exit 1; }
+          [ "$(git -C "${{ github.workspace }}/AnyKernel3" rev-parse HEAD)" = "${{ inputs.anykernel3_commit}" ] || { echo "AnyKernel3 pin mismatch" >&2; exit 1; }
         fi
-
-    # NOTE: the old 'Install build deps for BTF generation (android12-5.10)'
-    # step (apt-get dwarves + libelf-dev) was removed. It was a leftover
-    # duplicate: the btf action installs its own build deps and builds
-    # pahole 1.31 from source, which shadows anything apt provides. Its only
-    # effect was a second apt call that once shipped broken on a runner
-    # image ('dpkg was interrupted', run 37814552622) and killed a job.
