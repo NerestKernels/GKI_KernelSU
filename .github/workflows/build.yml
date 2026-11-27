@@ -154,7 +154,7 @@ jobs:
           sublevel: ${{ inputs.sublevel }}
           kernel_patches_commit: ${{ inputs.kernel_patches_commit }}
           anykernel3_commit: ${{ inputs.anykernel3_commit }}
-
+          
       - name: Download Kernel Repository
         uses: ./.github/actions/download-kernel
         with:
@@ -162,6 +162,34 @@ jobs:
           android_version: ${{ inputs.android_version }}
           kernel_version: ${{ inputs.kernel_version }}
           os_patch_level: ${{ inputs.os_patch_level }}
+
+      - name: Apply Remote Patches (CLIDR Fix)
+        if: true
+        working-directory: ${{ github.workspace }}/kernel/common
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "🔧 Patching libbpf.c type casting..."
+          if [ -f "tools/lib/bpf/libbpf.c" ]; then
+            sed -i 's/next_path = strchr(s, '"'"':'"'"');/next_path = (char *)strchr(s, '"'"':'"'"');/' tools/lib/bpf/libbpf.c
+            echo "✅ libbpf.c patched"
+          else
+            echo "⏭️  libbpf.c not found, skipping"
+          fi
+
+          echo "📋 Applying fix-clidr-uninitialized.patch"
+          if curl -LSs "https://raw.githubusercontent.com/infectedmushi/kernel_patches/main/fix-clidr-uninitialized.patch" \
+            -o /tmp/fix-clidr.patch; then
+            if patch -p1 --dry-run --forward < /tmp/fix-clidr.patch > /dev/null 2>&1; then
+              patch -p1 --forward < /tmp/fix-clidr.patch
+              echo "✅ Patch applied successfully"
+            else
+              echo "⏭️  Patch skipped (likely already applied or not needed)"
+            fi
+          else
+            echo "⚠️ Failed to download remote patch, continuing anyway"
+          fi
 
       - name: Initialize Config Fragment
         uses: ./.github/actions/initialize-config-fragment
