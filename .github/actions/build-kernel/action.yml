@@ -1,5 +1,5 @@
 name: 'Build Kernel'
-description: 'Build GKI kernels with the latest Neutron Clang and a direct LLVM Kbuild'
+description: 'Builds GKI kernels with the latest Neutron Clang using direct Kbuild'
 inputs:
   version:
     description: 'Kernel config version (e.g., android14-6.1)'
@@ -31,19 +31,17 @@ runs:
           https://raw.githubusercontent.com/Neutron-Toolchains/antman/main/antman \
           --output antman
         chmod +x antman
-
         ./antman --sync=latest --noconfirm --noprogress
 
         test -x "$NEUTRON_DIR/bin/clang"
         test -x "$NEUTRON_DIR/bin/ld.lld"
-
         echo "$NEUTRON_DIR/bin" >> "$GITHUB_PATH"
         echo "NEUTRON_CLANG_BIN=$NEUTRON_DIR/bin" >> "$GITHUB_ENV"
 
         "$NEUTRON_DIR/bin/clang" --version | head -n 1
         grep -A1 '^\[tag\]' "$NEUTRON_DIR/build.info" || true
 
-    - name: Build GKI kernel with LLVM
+    - name: Build GKI kernel with Neutron LLVM
       shell: bash
       working-directory: ${{ github.workspace }}/kernel
       run: |
@@ -51,14 +49,19 @@ runs:
 
         test -x "$NEUTRON_CLANG_BIN/clang"
         test -x "$NEUTRON_CLANG_BIN/ld.lld"
+        test -f common/Makefile
+        test -f common/arch/arm64/configs/gki_defconfig || {
+          echo "::error title=missing GKI defconfig::common/arch/arm64/configs/gki_defconfig was not found"
+          exit 1
+        }
 
         export PATH="$NEUTRON_CLANG_BIN:$PATH"
-        export ARCH=arm64
-        export SUBARCH=arm64
-        export LLVM=1
-        export LLVM_IAS=1
+        export ARCH=arm64 SUBARCH=arm64
+        export LLVM=1 LLVM_IAS=1
         export CROSS_COMPILE=aarch64-linux-gnu-
         export CROSS_COMPILE_COMPAT=aarch64-linux-gnu-
+        export CC="ccache $NEUTRON_CLANG_BIN/clang"
+        export HOSTCC="ccache $NEUTRON_CLANG_BIN/clang"
         export LD="$NEUTRON_CLANG_BIN/ld.lld"
         export HOSTLD="$NEUTRON_CLANG_BIN/ld.lld"
         export AR="$NEUTRON_CLANG_BIN/llvm-ar"
@@ -66,68 +69,70 @@ runs:
         export OBJCOPY="$NEUTRON_CLANG_BIN/llvm-objcopy"
         export OBJDUMP="$NEUTRON_CLANG_BIN/llvm-objdump"
         export STRIP="$NEUTRON_CLANG_BIN/llvm-strip"
-        export CC="ccache $NEUTRON_CLANG_BIN/clang"
-        export CXX="ccache $NEUTRON_CLANG_BIN/clang++"
-        export HOSTCC="ccache $NEUTRON_CLANG_BIN/clang"
-        export HOSTCXX="ccache $NEUTRON_CLANG_BIN/clang++"
 
-        echo "Compiler:"
-        $NEUTRON_CLANG_BIN/clang --version | head -n 1
-        ccache -s || true
+        echo "Compiler: $($NEUTRON_CLANG_BIN/clang --version | head -n 1)"
+        echo "Linker: $($NEUTRON_CLANG_BIN/ld.lld --version)"
 
         MAKE_JOBS="$(nproc --all)"
-        OUT=out
+        OUT_DIR="/home/runner/out"
+        OUT="$OUT_DIR/common"
         mkdir -p "$OUT"
 
-        make -j"$MAKE_JOBS" \
-          LLVM=1 LLVM_IAS=1 \
-          LD="$LD" HOSTLD="$HOSTLD" \
-          AR="$AR" NM="$NM" \
-          OBJCOPY="$OBJCOPY" OBJDUMP="$OBJDUMP" STRIP="$STRIP" \
-          CC="$CC" CXX="$CXX" \
-          HOSTCC="$HOSTCC" HOSTCXX="$HOSTCXX" \
-          O="$OUT" \
-          gki_defconfig
+        MAKE_FLAGS=(
+          LLVM=1 LLVM_IAS=1
+          LD="$LD" HOSTLD="$HOSTLD"
+          AR="$AR" NM="$NM"
+          OBJCOPY="$OBJCOPY" OBJDUMP="$OBJDUMP" STRIP="$STRIP"
+          CC="$CC" HOSTCC="$HOSTCC"
+          O="$OUT"
+        )
 
-        if [ -f common/wild_defconfig.fragment ]; then
-          scripts/kconfig/merge_config.sh \
-            -m -O "$OUT" "$OUT/.config" \
-            common/wild_defconfig.fragment
+        # GKI manifests place the actual kernel Makefile under common/; invoking
+        # make from the manifest checkout root has no kernel targets.
+        make -C common -j"$MAKE_JOBS" "${MAKE_FLAGS[@]}" gki_defconfig
+
+        CONFIG="$OUT/.config"
+        test -s "$CONFIG"
+        FRAGMENT="common/wild_defconfig.fragment"
+        if [ -s "$FRAGMENT" ]; then
+          common/scripts/kconfig/merge_config.sh -m -O "$OUT" "$CONFIG" "$FRAGMENT"
         else
-          echo "::warning::common/wild_defconfig.fragment not found"
-        fi
-
-        make -j"$MAKE_JOBS" \
-          LLVM=1 LLVM_IAS=1 \
-          LD="$LD" HOSTLD="$HOSTLD" \
-          AR="$AR" NM="$NM" \
-          OBJCOPY="$OBJCOPY" OBJDUMP="$OBJDUMP" STRIP="$STRIP" \
-          CC="$CC" CXX="$CXX" \
-          HOSTCC="$HOSTCC" HOSTCXX="$HOSTCXX" \
-          O="$OUT" \
-          olddefconfig
-
-        make -j"$MAKE_JOBS" \
-          LLVM=1 LLVM_IAS=1 \
-          LD="$LD" HOSTLD="$HOSTLD" \
-          AR="$AR" NM="$NM" \
-          OBJCOPY="$OBJCOPY" OBJDUMP="$OBJDUMP" STRIP="$STRIP" \
-          CC="$CC" CXX="$CXX" \
-          HOSTCC="$HOSTCC" HOSTCXX="$HOSTCXX" \
-          O="$OUT" \
-          Image modules 2>&1 | tee build.log
-
-        if [ -f "$OUT/arch/arm64/boot/Image" ]; then
-          cp "$OUT/arch/arm64/boot/Image" \
-            "${{ github.workspace }}/AnyKernel3/Image"
-        elif [ -f "$OUT/dist/Image" ]; then
-          cp "$OUT/dist/Image" \
-            "${{ github.workspace }}/AnyKernel3/Image"
-        else
-          tail -n 100 build.log || true
-          echo "::error::Kernel Image was not produced"
+          echo "::error title=missing wild fragment::$FRAGMENT not found or empty"
           exit 1
         fi
+
+        # Retain the NTSYNC override previously supplied by the legacy build
+        # fragment, and apply the requested ARM64 page size before resolution.
+        if grep -q '^config NTSYNC\|^menuconfig NTSYNC' common/drivers/misc/Kconfig common/drivers/misc/*/Kconfig 2>/dev/null; then
+          common/scripts/config --file "$CONFIG" --enable NTSYNC
+        fi
+        case "${{ inputs.page_size }}" in
+          4k)
+            common/scripts/config --file "$CONFIG" --enable ARM64_4K_PAGES --disable ARM64_16K_PAGES
+            ;;
+          16k)
+            common/scripts/config --file "$CONFIG" --enable ARM64_16K_PAGES --disable ARM64_4K_PAGES
+            ;;
+          *)
+            echo "::error title=invalid page size::Unsupported page_size=${{ inputs.page_size }} (expected 4k or 16k)"
+            exit 1
+            ;;
+        esac
+
+        make -C common -j"$MAKE_JOBS" "${MAKE_FLAGS[@]}" olddefconfig
+
+        echo "Building Image and modules with Neutron Clang (jobs=$MAKE_JOBS)"
+        set -o pipefail
+        make -C common -j"$MAKE_JOBS" "${MAKE_FLAGS[@]}" Image modules 2>&1 | tee build.log
+
+        test -s "$CONFIG"
+        if [ ! -s "$OUT/arch/arm64/boot/Image" ]; then
+          tail -n 100 build.log || true
+          echo "::error title=missing kernel image::Kernel Image was not produced"
+          exit 1
+        fi
+        mkdir -p "${{ github.workspace }}/AnyKernel3"
+        cp "$OUT/arch/arm64/boot/Image" "${{ github.workspace }}/AnyKernel3/Image"
 
         echo "Post-build ccache statistics:"
         ccache -s
@@ -137,9 +142,8 @@ runs:
       working-directory: ${{ github.workspace }}/kernel
       run: |
         set -euo pipefail
-
-        CONFIG_FILE="out/.config"
-        test -f "$CONFIG_FILE"
+        CONFIG_FILE="/home/runner/out/common/.config"
+        test -s "$CONFIG_FILE"
 
         if [ "${{ inputs.page_size }}" = "16k" ]; then
           grep -qx 'CONFIG_ARM64_16K_PAGES=y' "$CONFIG_FILE"
@@ -147,4 +151,6 @@ runs:
         else
           grep -qx 'CONFIG_ARM64_4K_PAGES=y' "$CONFIG_FILE"
           grep -qx '# CONFIG_ARM64_16K_PAGES is not set' "$CONFIG_FILE"
-        fi        
+        fi
+
+        echo "Verified config: $CONFIG_FILE"
